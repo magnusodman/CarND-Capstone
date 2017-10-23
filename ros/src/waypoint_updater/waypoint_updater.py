@@ -21,11 +21,12 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 50 # Number of waypoints we will publish. You can change this number
 
 
 class WaypointUpdater(object):
     def __init__(self):
+        rospy.loginfo("Waypoint updater starting..")
         rospy.init_node('waypoint_updater')
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
@@ -36,17 +37,58 @@ class WaypointUpdater(object):
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
-        # TODO: Add other member variables you need below
 
+        # TODO: Add other member variables you need below
+        self.pose = None
+        self.waypoints = []
+
+        rospy.loginfo("Waypoint updater started")
+        self.publish_waypoints()
         rospy.spin()
 
     def pose_cb(self, msg):
-        # TODO: Implement
-        pass
+        self.pose = msg.pose
 
     def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        pass
+        self.waypoints = waypoints.waypoints
+        rospy.loginfo("Waypoints message received")
+        
+    def publish_waypoints(self):
+        while self.pose == None or self.waypoints == None:
+            pass
+        rospy.loginfo("Pose and waypoints loaded")
+
+        rate = rospy.Rate(1)
+ 
+        while True:
+            next_waypoints = self.get_next_waypoints()
+            
+            pub_lane_msg = Lane()
+            pub_lane_msg.header.frame_id = '/world'
+            pub_lane_msg.header.stamp = rospy.Time(0)
+            pub_lane_msg.waypoints = next_waypoints
+            self.final_waypoints_pub.publish(pub_lane_msg)
+            rate.sleep()
+
+    def get_next_waypoints(self):
+        print("Current pose:")
+        print("x: ", self.pose.position.x)
+        print("y: ", self.pose.position.y)
+        
+        if len(self.waypoints) > 0:
+            distances = [(i, self.dist(self.pose.position, w.pose.pose.position), w) for i,w in enumerate(self.waypoints)]
+            distances.sort(key=lambda t: t[1])
+            #TODO Handle wraparound
+            start_index = distances[0][0]
+            print("Closest waypoint:")
+            print("index: ", start_index)
+            print("x: ", self.waypoints[start_index].pose.pose.position.x)
+            print("y: ", self.waypoints[start_index].pose.pose.position.y)
+            return self.waypoints[start_index:start_index+LOOKAHEAD_WPS]
+        return None
+    
+    def dist(self, p1, p2):
+        return math.sqrt((p1.x-p2.x)**2 + (p1.y -p2.y)**2)
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
@@ -74,5 +116,6 @@ class WaypointUpdater(object):
 if __name__ == '__main__':
     try:
         WaypointUpdater()
+
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start waypoint updater node.')
